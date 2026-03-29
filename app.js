@@ -90,13 +90,10 @@ const ThemeManager = {
     this.btn = document.getElementById("themeToggleBtn");
     if (!this.btn) return;
 
-    // Recupera a preferência salva ou verifica se o Windows/Android está no modo escuro
+    // Recupera a preferência salva. Modo Claro é o padrão (primário).
     const storedTheme = localStorage.getItem("theme");
-    const prefersDark = window.matchMedia(
-      "(prefers-color-scheme: dark)",
-    ).matches;
 
-    if (storedTheme === "dark" || (!storedTheme && prefersDark)) {
+    if (storedTheme === "dark") {
       document.documentElement.classList.add("dark");
     }
 
