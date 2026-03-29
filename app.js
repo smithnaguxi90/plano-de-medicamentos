@@ -1,7 +1,9 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
 import {
   getAuth,
-  signInAnonymously,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  signOut,
   onAuthStateChanged,
 } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 import {
@@ -116,6 +118,12 @@ const ThemeManager = {
 // --- CONTROLADOR DA UI ---
 const UI = {
   elements: {
+    loginScreen: document.getElementById("loginScreen"),
+    loginForm: document.getElementById("loginForm"),
+    emailInput: document.getElementById("emailInput"),
+    passwordInput: document.getElementById("passwordInput"),
+    loginSubmitBtn: document.getElementById("loginSubmitBtn"),
+    logoutBtn: document.getElementById("logoutBtn"),
     startDate: document.getElementById("startDate"),
     generateBtn: document.getElementById("generateButton"),
     clearBtn: document.getElementById("clearButton"),
@@ -379,6 +387,7 @@ const FirebaseAPI = {
   db: null,
   userId: null,
   docRef: null,
+  unsubscribe: null,
 
   init() {
     this.app = initializeApp(CONSTANTS.FIREBASE_CONFIG);
@@ -394,23 +403,26 @@ const FirebaseAPI = {
     window.addEventListener("online", () => UI.updateCloudStatus("connected"));
     window.addEventListener("offline", () => UI.updateCloudStatus("offline"));
 
-    signInAnonymously(this.auth).catch((err) => {
-      console.error("Auth error:", err);
-      UI.updateCloudStatus("error");
-      Notifications.show("Falha ao autenticar na nuvem.", "error");
-    });
-
     onAuthStateChanged(this.auth, (user) => {
       if (user) {
+        UI.elements.loginScreen.classList.add("hidden");
+        UI.elements.logoutBtn.classList.remove("hidden");
         this.userId = user.uid;
         this.docRef = doc(this.db, "users", this.userId, "planos", "principal");
         this.listenToData();
+      } else {
+        if (this.unsubscribe) this.unsubscribe();
+        this.userId = null;
+        this.docRef = null;
+        UI.elements.loginScreen.classList.remove("hidden");
+        UI.elements.logoutBtn.classList.add("hidden");
       }
     });
   },
 
   listenToData() {
-    onSnapshot(
+    if (this.unsubscribe) this.unsubscribe();
+    this.unsubscribe = onSnapshot(
       this.docRef,
       (snapshot) => {
         if (!navigator.onLine) {
@@ -516,6 +528,8 @@ const AppController = {
   },
 
   bindEvents() {
+    UI.elements.loginForm.addEventListener("submit", (e) => this.handleLogin(e));
+    UI.elements.logoutBtn.addEventListener("click", () => this.handleLogout());
     UI.elements.generateBtn.addEventListener("click", () =>
       this.handleGenerate(),
     );
@@ -531,6 +545,38 @@ const AppController = {
     UI.elements.markTodayBtn.addEventListener("click", () =>
       this.handleMarkToday(),
     );
+  },
+
+  async handleLogin(e) {
+    e.preventDefault();
+    const email = UI.elements.emailInput.value.trim();
+    const pass = UI.elements.passwordInput.value;
+    const btn = UI.elements.loginSubmitBtn;
+    const originalText = btn.innerHTML;
+
+    btn.disabled = true;
+    btn.innerHTML = `<svg class="animate-spin h-5 w-5 mx-auto text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`;
+
+    try {
+      // Tenta logar
+      await signInWithEmailAndPassword(FirebaseAPI.auth, email, pass);
+      Notifications.show("Bem-vindo de volta!", "success");
+    } catch (err) {
+      // Se der erro porque a conta não existe, cria a conta na mesma hora
+      try {
+        await createUserWithEmailAndPassword(FirebaseAPI.auth, email, pass);
+        Notifications.show("Sua nova conta foi criada!", "success");
+      } catch (err2) {
+        Notifications.show("Erro: Verifique e-mail ou se a senha tem 6 caracteres.", "error");
+      }
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = originalText;
+    }
+  },
+
+  async handleLogout() {
+    await signOut(FirebaseAPI.auth);
   },
 
   async handleGenerate() {
